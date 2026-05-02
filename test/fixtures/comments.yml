@@ -1,0 +1,7 @@
+one:
+  post: one
+  body: First comment on the first post.
+
+two:
+  post: one
+  body: Second comment on the first post.
