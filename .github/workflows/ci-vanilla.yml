@@ -1,0 +1,52 @@
+name: CI (vanilla)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  vanilla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Install Chromium for system tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends chromium-browser chromium-chromedriver
+          chromium-browser --version || google-chrome --version || true
+
+      - name: Prepare DB
+        run: bin/rails db:create db:schema:load
+
+      - name: Rubocop
+        run: bin/rubocop
+
+      - name: Minitest
+        run: bin/rails test
+
+      - name: System tests
+        run: bin/rails test:system
