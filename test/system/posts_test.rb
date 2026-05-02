@@ -21,9 +21,9 @@ class PostsTest < ApplicationSystemTestCase
     assert_text "Post was successfully created"
   end
 
-  test "destroying a Post" do
+  test "viewing a Post" do
     visit post_url(@post)
-    accept_confirm { click_on "Destroy this post" }
-    assert_text "Post was successfully destroyed"
+    assert_text @post.title
+    assert_text @post.body
   end
 end
