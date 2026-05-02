@@ -1,0 +1,108 @@
+name: CI (aq)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  aq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          ls -l /dev/kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Install qemu/socat/ovmf
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils socat ovmf wget gpg ca-certificates coreutils \
+            meson ninja-build pkg-config liblua5.4-dev libinih-dev libglib2.0-dev \
+            git build-essential
+
+      - name: Cache aq + tio binaries
+        id: aq-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/bin/aq
+            /usr/local/bin/tio
+          key: aq-2.3.0-tio-3.9-${{ runner.os }}
+
+      - name: Install aq + tio if cache miss
+        if: steps.aq-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sL https://raw.githubusercontent.com/pirj/aq/v2.3.0/aq -o /tmp/aq
+          chmod +x /tmp/aq
+          sudo mv /tmp/aq /usr/local/bin/aq
+          aq --version
+          git clone --depth 1 --branch v3.9 https://github.com/tio/tio.git /tmp/tio
+          cd /tmp/tio && meson setup build && meson compile -C build && sudo meson install -C build
+
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Compute snapshot key
+        id: key
+        run: |
+          KEY=$(sha256sum Gemfile.lock db/schema.rb Dockerfile bin/aq-provision \
+                | awk '{print $1}' | sha256sum | head -c 16)
+          echo "snapkey=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Snapshot key: $KEY"
+
+      - name: Cache aq alpine base image
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aq/x86_64
+          key: aq-alpine-base-3.22.2-v1
+
+      - name: Cache aq snapshot
+        id: snap-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aq/snapshots/x86_64/provisioned
+          key: aq-snapshot-${{ steps.key.outputs.snapkey }}
+
+      - name: Provision snapshot if cache miss
+        if: steps.snap-cache.outputs.cache-hit != 'true'
+        run: |
+          set -ex
+          aq new app
+          aq start app
+          aq scp -r . app:/repo
+          aq exec app /repo/bin/aq-provision
+          aq stop app
+          aq snapshot create app provisioned
+          aq rm app
+
+      - name: Run rubocop / minitest / system tests in parallel via aq fanout
+        run: |
+          aq new --from-snapshot=provisioned staging
+          aq start staging
+          aq scp -r . staging:/repo
+          aq stop staging
+          aq snapshot create staging running-with-code
+          aq rm staging
+
+          aq fanout running-with-code 3 -- '
+            cd /repo
+            export DATABASE_URL=postgres://rails:rails@localhost:5432
+            rc-service postgresql start || pg_ctl -D /var/lib/postgresql/17/data start
+            case $AQ_SHARD_INDEX in
+              0) bundle exec rubocop ;;
+              1) RAILS_ENV=test bin/rails test ;;
+              2) RAILS_ENV=test bin/rails test:system ;;
+            esac
+          '
+
+      - name: Cleanup ephemeral snapshot
+        if: always()
+        run: aq snapshot rm --force running-with-code 2>/dev/null || true
