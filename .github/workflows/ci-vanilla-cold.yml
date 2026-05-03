@@ -1,0 +1,54 @@
+name: CI (vanilla cold)
+
+# Same as ci-vanilla.yml but with bundler-cache OFF — simulates the realistic
+# scenario where bundler cache misses (Gemfile.lock changed, fresh runner,
+# self-hosted infra without action caching, etc.). Triggered manually.
+on:
+  workflow_dispatch:
+
+jobs:
+  vanilla-cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: false
+
+      - name: Bundle install (cold, no cache)
+        run: bundle install --jobs=4 --retry=3
+
+      - name: Verify Chrome
+        run: google-chrome --version
+
+      - name: Prepare DB
+        run: bin/rails db:create db:schema:load
+
+      - name: Rubocop
+        run: bin/rubocop
+
+      - name: Minitest
+        run: bin/rails test
+
+      - name: System tests
+        run: bin/rails test:system
