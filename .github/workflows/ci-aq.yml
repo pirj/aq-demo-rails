@@ -104,8 +104,36 @@ jobs:
 
       - name: Run rubocop / minitest / system tests in parallel via aq fanout
         run: |
+          set -x
           aq new --from-snapshot=provisioned staging
-          aq start staging
+          if ! aq start staging; then
+            echo "=== aq start failed; inspecting snapshot rootfs ==="
+            aq stop staging 2>/dev/null || true
+            sudo modprobe nbd max_part=8 || true
+            sudo qemu-nbd -c /dev/nbd0 ~/.local/share/aq/staging/storage.qcow2 || \
+              sudo qemu-nbd --read-only -c /dev/nbd0 ~/.local/share/aq/snapshots/x86_64/provisioned/disk.qcow2
+            sleep 2
+            sudo lsblk /dev/nbd0
+            sudo mkdir -p /mnt/inspect
+            sudo mount /dev/nbd0p3 /mnt/inspect 2>&1 || sudo mount /dev/nbd0 /mnt/inspect 2>&1 || true
+            echo "=== /etc/ssh/sshd_config ==="
+            sudo cat /mnt/inspect/etc/ssh/sshd_config 2>&1 | grep -vE '^#|^$' || true
+            echo "=== /etc/inittab ==="
+            sudo cat /mnt/inspect/etc/inittab 2>&1 || true
+            echo "=== /etc/nologin ==="
+            sudo ls -la /mnt/inspect/etc/nologin 2>&1 || true
+            echo "=== /etc/hosts.deny ==="
+            sudo cat /mnt/inspect/etc/hosts.deny 2>&1 || true
+            echo "=== /root/.ssh/authorized_keys ==="
+            sudo cat /mnt/inspect/root/.ssh/authorized_keys 2>&1 || true
+            echo "=== /etc/passwd root entry ==="
+            sudo grep '^root:' /mnt/inspect/etc/passwd 2>&1 || true
+            echo "=== /var/log/messages tail ==="
+            sudo tail -50 /mnt/inspect/var/log/messages 2>&1 || true
+            sudo umount /mnt/inspect 2>&1 || true
+            sudo qemu-nbd -d /dev/nbd0 2>&1 || true
+            exit 1
+          fi
           aq scp -r . staging:/repo
           aq stop staging
           aq snapshot create staging running-with-code
