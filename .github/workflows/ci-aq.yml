@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/aq/x86_64
-          key: aq-alpine-base-3.22.2-v1
+          key: aq-alpine-base-3.22.2-v2
 
       - name: Cache aq snapshot
         id: snap-cache
