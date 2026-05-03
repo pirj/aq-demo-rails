@@ -44,11 +44,13 @@ jobs:
           git clone --depth 1 --branch v3.9 https://github.com/tio/tio.git /tmp/tio
           cd /tmp/tio && meson setup build && meson compile -C build && sudo meson install -C build
 
-      - name: Add SSH key
+      - name: Use the repo's demo SSH key (deterministic across runners)
         run: |
           mkdir -p ~/.ssh
-          ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519
+          cp demo_id_ed25519 ~/.ssh/id_ed25519
+          cp demo_id_ed25519.pub ~/.ssh/id_ed25519.pub
           chmod 600 ~/.ssh/id_ed25519
+          chmod 644 ~/.ssh/id_ed25519.pub
 
       - name: Compute snapshot key
         id: key
@@ -62,7 +64,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/aq/x86_64
-          key: aq-alpine-base-3.22.2-v2
+          key: aq-alpine-base-3.22.2-v3
 
       - name: Cache aq snapshot
         id: snap-cache
@@ -70,25 +72,6 @@ jobs:
         with:
           path: ~/.local/share/aq/snapshots/x86_64/provisioned
           key: aq-snapshot-${{ steps.key.outputs.snapkey }}
-
-      - name: Diagnostics — fingerprint base + snapshot
-        run: |
-          echo "=== alpine base directory ==="
-          ls -la ~/.local/share/aq/x86_64/ 2>&1 || echo "(not present)"
-          for f in ~/.local/share/aq/x86_64/*; do
-            [ -f "$f" ] || continue
-            echo "$(stat -c '%s %a %n' "$f") sha256=$(sha256sum "$f" | awk '{print $1}')"
-          done
-          echo "=== snapshot directory ==="
-          ls -la ~/.local/share/aq/snapshots/x86_64/provisioned/ 2>&1 || echo "(not present)"
-          for f in ~/.local/share/aq/snapshots/x86_64/provisioned/*; do
-            [ -f "$f" ] || continue
-            echo "$(stat -c '%s %a %n' "$f") sha256=$(sha256sum "$f" | awk '{print $1}')"
-          done
-          echo "=== qemu-img info on snapshot disk ==="
-          qemu-img info --force-share ~/.local/share/aq/snapshots/x86_64/provisioned/disk.qcow2 2>&1 || echo "(missing)"
-          echo "=== qemu-img info on alpine base ==="
-          qemu-img info ~/.local/share/aq/x86_64/alpine-base-3.22.2-x86_64.raw 2>&1 || echo "(missing)"
 
       - name: Provision snapshot if cache miss
         if: steps.snap-cache.outputs.cache-hit != 'true'
@@ -104,36 +87,8 @@ jobs:
 
       - name: Run rubocop / minitest / system tests in parallel via aq fanout
         run: |
-          set -x
           aq new --from-snapshot=provisioned staging
-          if ! aq start staging; then
-            echo "=== aq start failed; inspecting snapshot rootfs ==="
-            aq stop staging 2>/dev/null || true
-            sudo modprobe nbd max_part=8 || true
-            sudo qemu-nbd -c /dev/nbd0 ~/.local/share/aq/staging/storage.qcow2 || \
-              sudo qemu-nbd --read-only -c /dev/nbd0 ~/.local/share/aq/snapshots/x86_64/provisioned/disk.qcow2
-            sleep 2
-            sudo lsblk /dev/nbd0
-            sudo mkdir -p /mnt/inspect
-            sudo mount /dev/nbd0p3 /mnt/inspect 2>&1 || sudo mount /dev/nbd0 /mnt/inspect 2>&1 || true
-            echo "=== /etc/ssh/sshd_config ==="
-            sudo cat /mnt/inspect/etc/ssh/sshd_config 2>&1 | grep -vE '^#|^$' || true
-            echo "=== /etc/inittab ==="
-            sudo cat /mnt/inspect/etc/inittab 2>&1 || true
-            echo "=== /etc/nologin ==="
-            sudo ls -la /mnt/inspect/etc/nologin 2>&1 || true
-            echo "=== /etc/hosts.deny ==="
-            sudo cat /mnt/inspect/etc/hosts.deny 2>&1 || true
-            echo "=== /root/.ssh/authorized_keys ==="
-            sudo cat /mnt/inspect/root/.ssh/authorized_keys 2>&1 || true
-            echo "=== /etc/passwd root entry ==="
-            sudo grep '^root:' /mnt/inspect/etc/passwd 2>&1 || true
-            echo "=== /var/log/messages tail ==="
-            sudo tail -50 /mnt/inspect/var/log/messages 2>&1 || true
-            sudo umount /mnt/inspect 2>&1 || true
-            sudo qemu-nbd -d /dev/nbd0 2>&1 || true
-            exit 1
-          fi
+          aq start staging
           aq scp -r . staging:/repo
           aq stop staging
           aq snapshot create staging running-with-code
