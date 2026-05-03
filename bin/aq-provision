@@ -41,4 +41,14 @@ echo "[provision] db:create + db:migrate (test env)"
 DATABASE_URL=postgres://rails:rails@localhost:5432 RAILS_ENV=test bin/rails db:create db:migrate
 DATABASE_URL=postgres://rails:rails@localhost:5432 RAILS_ENV=development bin/rails db:create db:migrate
 
+echo "[provision] sshd hardening for snapshot reuse"
+# Disable PAM in sshd to avoid "Not allowed at this time" banner that fires
+# when restoring this snapshot on a fresh aq start (Alpine's default
+# sshd_config uses PAM, which depends on runtime state that doesn't survive
+# the snapshot/restore cycle reliably).
+sed -i 's/^#*UsePAM.*/UsePAM no/' /etc/ssh/sshd_config
+# Clear any nologin marker that might have been created during a previous boot.
+rm -f /etc/nologin /var/run/nologin /run/nologin
+rc-service sshd restart || true
+
 echo "[provision] DONE"
