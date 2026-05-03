@@ -10,9 +10,16 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_02_081424) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_03_141727) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "categories", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "title"
+    t.datetime "updated_at", null: false
+  end
 
   create_table "comments", force: :cascade do |t|
     t.text "body"
@@ -24,10 +31,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_02_081424) do
 
   create_table "posts", force: :cascade do |t|
     t.text "body"
+    t.bigint "category_id", null: false
     t.datetime "created_at", null: false
+    t.datetime "published_at"
+    t.string "slug"
     t.string "title"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["category_id"], name: "index_posts_on_category_id"
+    t.index ["user_id"], name: "index_posts_on_user_id"
+  end
+
+  create_table "posts_tags", id: false, force: :cascade do |t|
+    t.bigint "post_id", null: false
+    t.bigint "posts_id", null: false
+    t.bigint "tag_id", null: false
+    t.bigint "tags_id", null: false
+    t.index ["posts_id"], name: "index_posts_tags_on_posts_id"
+    t.index ["tags_id"], name: "index_posts_tags_on_tags_id"
+  end
+
+  create_table "tags", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name"
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.string "name"
     t.datetime "updated_at", null: false
   end
 
   add_foreign_key "comments", "posts"
+  add_foreign_key "posts", "categories"
+  add_foreign_key "posts", "users"
+  add_foreign_key "posts_tags", "posts", column: "posts_id"
+  add_foreign_key "posts_tags", "tags", column: "tags_id"
 end

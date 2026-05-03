@@ -22,6 +22,21 @@
   </div>
 
   <div>
+    <%= form.label :slug, style: "display: block" %>
+    <%= form.text_field :slug %>
+  </div>
+
+  <div>
+    <%= form.label :user_id, "User", style: "display: block" %>
+    <%= form.collection_select :user_id, User.all, :id, :name, prompt: "Select user" %>
+  </div>
+
+  <div>
+    <%= form.label :category_id, "Category", style: "display: block" %>
+    <%= form.collection_select :category_id, Category.all, :id, :title, prompt: "Select category" %>
+  </div>
+
+  <div>
     <%= form.submit %>
   </div>
 <% end %>

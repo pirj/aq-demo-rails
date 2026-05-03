@@ -1,7 +1,15 @@
 one:
   title: First post
   body: Body of the first post.
+  user: one
+  category: one
+  slug: first-post
+  published_at: <%= 1.day.ago %>
 
 two:
   title: Second post
   body: Body of the second post.
+  user: two
+  category: two
+  slug: second-post
+  published_at: <%= 2.days.ago %>
