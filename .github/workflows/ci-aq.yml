@@ -71,7 +71,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/aq/snapshots/x86_64/provisioned
-          key: aq-snapshot-${{ steps.key.outputs.snapkey }}
+          key: aq-snapshot-base-v3-${{ steps.key.outputs.snapkey }}
 
       - name: Provision snapshot if cache miss
         if: steps.snap-cache.outputs.cache-hit != 'true'
