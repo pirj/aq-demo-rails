@@ -1,0 +1,119 @@
+name: CI (aq fanout=50)
+
+# Memory-stress demo: 50 parallel chromium-driven system tests via aq fanout.
+# Vanilla can't fit this on a 7 GB ubuntu-latest runner — 50 chromium browsers
+# would consume ~10 GB RSS and OOM.
+on:
+  workflow_dispatch:
+
+jobs:
+  fanout50:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+
+      - name: Restore apt cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: aq-demo-apt-noble-v1
+
+      - name: Install qemu/socat/ovmf
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils socat ovmf wget gpg ca-certificates coreutils \
+            meson ninja-build pkg-config liblua5.4-dev libinih-dev libglib2.0-dev \
+            git build-essential
+
+      - name: Cache aq + tio binaries
+        id: aq-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/bin/aq
+            /usr/local/bin/tio
+          key: aq-2.3.0-tio-3.9-${{ runner.os }}
+
+      - name: Install aq + tio if cache miss
+        if: steps.aq-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sL https://raw.githubusercontent.com/pirj/aq/v2.3.1/aq -o /tmp/aq
+          chmod +x /tmp/aq
+          sudo mv /tmp/aq /usr/local/bin/aq
+          git clone --depth 1 --branch v3.9 https://github.com/tio/tio.git /tmp/tio
+          cd /tmp/tio && meson setup build && meson compile -C build && sudo meson install -C build
+
+      - name: Use the repo's demo SSH key
+        run: |
+          mkdir -p ~/.ssh
+          cp demo_id_ed25519 ~/.ssh/id_ed25519
+          cp demo_id_ed25519.pub ~/.ssh/id_ed25519.pub
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Compute snapshot key
+        id: key
+        run: |
+          KEY=$(sha256sum Gemfile.lock db/schema.rb Dockerfile bin/aq-provision \
+                | awk '{print $1}' | sha256sum | head -c 16)
+          echo "snapkey=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Cache aq alpine base image
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aq/x86_64
+          key: aq-alpine-base-3.22.2-v3
+
+      - name: Cache aq snapshot
+        id: snap-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aq/snapshots/x86_64/provisioned
+          key: aq-snapshot-base-v3-${{ steps.key.outputs.snapkey }}
+
+      - name: Provision snapshot if cache miss
+        if: steps.snap-cache.outputs.cache-hit != 'true'
+        run: |
+          aq new app
+          aq start app
+          aq scp -r . app:/repo
+          aq exec app /repo/bin/aq-provision
+          aq stop app
+          aq snapshot create app provisioned
+          aq rm app
+
+      - name: Fan out 50 parallel one-test shards
+        run: |
+          aq new --from-snapshot=provisioned staging
+          aq start staging
+          aq scp -r . staging:/repo
+          aq stop staging
+          aq snapshot create staging running-with-code
+          aq rm staging
+
+          # Memory baseline before fan-out
+          free -h
+
+          aq fanout running-with-code 50 -- '
+            cd /repo
+            export DATABASE_URL=postgres://rails:rails@localhost:5432
+            rc-service postgresql start || pg_ctl -D /var/lib/postgresql/17/data start
+            # Each shard runs the system-test class with a different seed so that
+            # one Chromium browser instance per shard exercises the suite slice.
+            RAILS_ENV=test bin/rails test test/system/posts_test.rb \
+              -n "/post index loads cleanly \(run $AQ_SHARD_INDEX\)/" || \
+              RAILS_ENV=test bin/rails test test/system/posts_test.rb --seed $AQ_SHARD_INDEX
+          '
+
+      - name: Memory after fan-out
+        if: always()
+        run: free -h
+
+      - name: Cleanup
+        if: always()
+        run: aq snapshot rm --force running-with-code 2>/dev/null || true

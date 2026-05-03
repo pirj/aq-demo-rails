@@ -30,8 +30,8 @@ class PostsTest < ApplicationSystemTestCase
     assert_text @post.body
   end
 
-  # Generate 30 parameterized system tests to make the suite non-trivial.
-  30.times do |i|
+  # 47 parameterized index tests so the suite has 50 system tests.
+  47.times do |i|
     test "post index loads cleanly (run #{i})" do
       visit posts_url
       assert_selector "h1", text: "Posts"
