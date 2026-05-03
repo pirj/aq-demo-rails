@@ -29,7 +29,7 @@ Median wall-clock from GitHub Actions runs on `ubuntu-latest` (7 GB RAM, 2 vCPU,
 | Vanilla cold (cache miss) | **82 s** | Fresh `bundle install` of 150 gems (~25 s) + the same sequential test pipeline |
 | aq warm (snapshot cache hit) | **87 s** | Restore aq's snapshot from `actions/cache` + `aq fanout 3` running rubocop + minitest + system tests in parallel inside one Alpine VM each |
 | aq cold (snapshot cache miss) | **231 s** | Fresh Alpine bootstrap + full provision (apk add ruby/postgres/chromium, bundle install, db:setup) + snapshot save + fanout |
-| aq fanout=8 (manual) | TBD | 8 parallel chromium browsers, each in its own VM, each running a slice of the system-test suite |
+| aq fanout=8 (manual) | **102 s** | 8 parallel chromium browsers, each in its own VM, each running a slice of the system-test suite. fanout=50 OOMs on `ubuntu-latest` (50 × 1 GB > 7 GB). |
 
 ## Honest reading
 
