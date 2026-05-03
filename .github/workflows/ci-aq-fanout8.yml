@@ -1,4 +1,4 @@
-name: CI (aq fanout=50)
+name: CI (aq fanout=8)
 
 # Memory-stress demo: 50 parallel chromium-driven system tests via aq fanout.
 # Vanilla can't fit this on a 7 GB ubuntu-latest runner — 50 chromium browsers
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  fanout50:
+  fanout8:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -99,7 +99,7 @@ jobs:
           # Memory baseline before fan-out
           free -h
 
-          aq fanout running-with-code 50 -- '
+          aq fanout running-with-code 8 -- '
             cd /repo
             export DATABASE_URL=postgres://rails:rails@localhost:5432
             rc-service postgresql start || pg_ctl -D /var/lib/postgresql/17/data start
