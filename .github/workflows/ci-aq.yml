@@ -37,7 +37,7 @@ jobs:
       - name: Install aq + tio if cache miss
         if: steps.aq-cache.outputs.cache-hit != 'true'
         run: |
-          curl -sL https://raw.githubusercontent.com/pirj/aq/v2.3.0/aq -o /tmp/aq
+          curl -sL https://raw.githubusercontent.com/pirj/aq/v2.3.1/aq -o /tmp/aq
           chmod +x /tmp/aq
           sudo mv /tmp/aq /usr/local/bin/aq
           aq --version
