@@ -71,6 +71,25 @@ jobs:
           path: ~/.local/share/aq/snapshots/x86_64/provisioned
           key: aq-snapshot-${{ steps.key.outputs.snapkey }}
 
+      - name: Diagnostics — fingerprint base + snapshot
+        run: |
+          echo "=== alpine base directory ==="
+          ls -la ~/.local/share/aq/x86_64/ 2>&1 || echo "(not present)"
+          for f in ~/.local/share/aq/x86_64/*; do
+            [ -f "$f" ] || continue
+            echo "$(stat -c '%s %a %n' "$f") sha256=$(sha256sum "$f" | awk '{print $1}')"
+          done
+          echo "=== snapshot directory ==="
+          ls -la ~/.local/share/aq/snapshots/x86_64/provisioned/ 2>&1 || echo "(not present)"
+          for f in ~/.local/share/aq/snapshots/x86_64/provisioned/*; do
+            [ -f "$f" ] || continue
+            echo "$(stat -c '%s %a %n' "$f") sha256=$(sha256sum "$f" | awk '{print $1}')"
+          done
+          echo "=== qemu-img info on snapshot disk ==="
+          qemu-img info --force-share ~/.local/share/aq/snapshots/x86_64/provisioned/disk.qcow2 2>&1 || echo "(missing)"
+          echo "=== qemu-img info on alpine base ==="
+          qemu-img info ~/.local/share/aq/x86_64/alpine-base-3.22.2-x86_64.raw 2>&1 || echo "(missing)"
+
       - name: Provision snapshot if cache miss
         if: steps.snap-cache.outputs.cache-hit != 'true'
         run: |
