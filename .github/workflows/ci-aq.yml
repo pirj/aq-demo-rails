@@ -18,7 +18,7 @@ jobs:
           sudo chmod 666 /dev/kvm
 
       - name: Restore apt cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /var/cache/apt/archives
           key: aq-demo-apt-noble-v1
@@ -38,7 +38,7 @@ jobs:
 
       - name: Cache aq + tio binaries
         id: aq-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/local/bin/aq
@@ -72,14 +72,14 @@ jobs:
           echo "Snapshot key: $KEY"
 
       - name: Cache aq alpine base image
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/aq/x86_64
           key: aq-alpine-base-3.22.2-v3
 
       - name: Cache aq snapshot
         id: snap-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/aq/snapshots/x86_64/provisioned
           key: aq-snapshot-base-v3-${{ steps.key.outputs.snapkey }}
